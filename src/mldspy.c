@@ -43,6 +43,8 @@
 
 #define MLD2_CAPABLE_ROUTERS "ff02::16" /* all MLDv2-capable routers */
 
+#define MLD2_HEADER_SIZE 8
+
 struct mld_group {
 	struct in6_addr	mar_address;	/* Multicast Address */
 	/* TODO: interface */
@@ -55,8 +57,8 @@ struct mar {
 	uint8_t		mar_auxlen;	/* Aux Data Len */
 	uint16_t	mar_sources;	/* Number of Sources */
 	struct in6_addr	mar_address;	/* Multicast Address */
-	struct in6_addr src_address;	/* source address */
-};
+	//struct in6_addr src_address;	/* source address */
+} __attribute__((__packed__));
 
 /* Version 2 Multicast Listener Report Message */
 struct mld2 {
@@ -66,21 +68,18 @@ struct mld2 {
 	uint16_t	mld2_res2;	/* reserved */
 	uint16_t	mld2_rec;	/* Nr of Mcast Address Records */
 	struct mar	mld2_mar;	/* First MCast Address Record */
-};
+} __attribute__((__packed__));
 
-void process_multicast_address_record(struct mld2 *mld)
+void * process_multicast_address_record(struct mar *mrec)
 {
-	struct mar mrec = mld->mld2_mar;
-
-	uint8_t mode;
-	mode = mrec.mar_type;
-	fprintf(stderr, " mode=%i", mode);
-
+	char straddr[INET6_ADDRSTRLEN];
+	struct in6_addr addr;
+	struct in6_addr *src;
 	uint16_t source_count;
-	source_count = ntohs(mrec.mar_sources);
-	fprintf(stderr, " sources=%i", source_count);
 
-	switch (mode) {
+	source_count = ntohs(mrec->mar_sources);
+
+	switch (mrec->mar_type) {
 		case MODE_IS_INCLUDE:
 			fprintf(stderr, "\n\tMODE_IS_INCLUDE ");
 			break;
@@ -106,24 +105,25 @@ void process_multicast_address_record(struct mld2 *mld)
 			break;
 	}
 
-	struct in6_addr addr;
-	char straddr[INET6_ADDRSTRLEN];
-
-	addr = mrec.mar_address;
+	addr = mrec->mar_address;
 	inet_ntop(AF_INET6, addr.s6_addr, straddr, INET6_ADDRSTRLEN);
 	fprintf(stderr, "\n\tmulticast group addr=%s", straddr);
+	fprintf(stderr, " mode=%i", mrec->mar_type);
+	fprintf(stderr, " auxlen=%i", mrec->mar_auxlen);
+	fprintf(stderr, " sources=%i", source_count);
 
-	/* TODO: loop through source addresses */
-	/*
-	struct in6_addr src;
-	src = mrec.src_address;
-
-	inet_ntop(AF_INET6, src.s6_addr, straddr, INET6_ADDRSTRLEN);
-	fprintf(stderr, " source=%s", straddr);
-	*/
+	/* loop through source addresses */
+	src = &(mrec->mar_address); /* actually ptr to in6_addr *before* src */
+	for (int i = 0; i < source_count; i++) {
+		inet_ntop(AF_INET6, (++src)->s6_addr, straddr, INET6_ADDRSTRLEN);
+		fprintf(stderr, " source=%s", straddr);
+	}
 
 	/* TODO: update MLD2 state machine */
 
+	/* return pointer to next record */
+	mrec++;
+	return mrec + source_count * 16 + mrec->mar_auxlen;
 }
 
 int main(int argc, char **argv)
@@ -135,9 +135,11 @@ int main(int argc, char **argv)
 	struct msghdr msg;
 	struct iovec iov;
 	struct icmp6_hdr *icmp6;
+	struct mar *mrec;
 	char buf_recv[BUFSIZE];
 	char buf_ctrl[BUFSIZE];
 	char buf_name[BUFSIZE];
+	uint16_t rec;
 
 	s = socket(AF_INET6, SOCK_RAW, IPPROTO_ICMPV6);
 	assert(s != 0);
@@ -193,14 +195,14 @@ int main(int argc, char **argv)
 					fprintf(stderr, "\tMLD2_LISTEN_REPORT");
 
 					/* number of mcast address records */
-					uint16_t rec = ntohs(icmp6->icmp6_data16[1]);
+					rec = ntohs(icmp6->icmp6_data16[1]);
 					fprintf(stderr, " records=%i", rec);
 
-					/* TODO: loop through mcat address records */
-
-					/* grab the Multicast Address Record */
-					struct mld2 *mld = (struct mld2 *)buf_recv;
-					process_multicast_address_record(mld);
+					/* process the Multicast Address Record(s) */
+					mrec = (struct mar *)(buf_recv + MLD2_HEADER_SIZE);
+					for (int i = 0; i < rec; i++) {
+						mrec = process_multicast_address_record(mrec);
+					}
 					break;
 				default:
 					break;
