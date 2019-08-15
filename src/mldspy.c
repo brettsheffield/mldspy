@@ -116,7 +116,7 @@ void * process_multicast_address_record(struct mar *mrec)
 	src = &(mrec->mar_address); /* actually ptr to in6_addr *before* src */
 	for (int i = 0; i < source_count; i++) {
 		inet_ntop(AF_INET6, (++src)->s6_addr, straddr, INET6_ADDRSTRLEN);
-		fprintf(stderr, " source=%s", straddr);
+		fprintf(stderr, "\n\t\tsource=%s", straddr);
 	}
 
 	/* TODO: update MLD2 state machine */
