@@ -122,8 +122,8 @@ void * process_multicast_address_record(struct mar *mrec)
 	/* TODO: update MLD2 state machine */
 
 	/* return pointer to next record */
-	mrec++;
-	return mrec + source_count * 16 + mrec->mar_auxlen;
+	src++;
+	return src + mrec->mar_auxlen;
 }
 
 int main(int argc, char **argv)
@@ -201,6 +201,10 @@ int main(int argc, char **argv)
 					/* process the Multicast Address Record(s) */
 					mrec = (struct mar *)(buf_recv + MLD2_HEADER_SIZE);
 					for (int i = 0; i < rec; i++) {
+
+						/* don't read beyond end of packet */
+						assert((void *)mrec <= (void *)(icmp6 + bytes));
+
 						mrec = process_multicast_address_record(mrec);
 					}
 					break;
