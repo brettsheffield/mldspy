@@ -2,6 +2,7 @@
 #include <arpa/inet.h>
 #include <assert.h>
 #include <errno.h>
+#include <ifaddrs.h>
 #include <net/if.h>
 #include <netdb.h>
 #include <netinet/icmp6.h>
@@ -130,11 +131,13 @@ int main(int argc, char **argv)
 {
 	int ret = 0;
 	int s = 0;
+	int joins = 0;
 	ssize_t bytes = 0;
 	struct ipv6_mreq req;
 	struct msghdr msg;
 	struct iovec iov;
 	struct icmp6_hdr *icmp6;
+	struct ifaddrs *ifaddr, *ifa;
 	struct mar *mrec;
 	char buf_recv[BUFSIZE];
 	char buf_ctrl[BUFSIZE];
@@ -144,11 +147,25 @@ int main(int argc, char **argv)
 	s = socket(AF_INET6, SOCK_RAW, IPPROTO_ICMPV6);
 	assert(s != 0);
 
-	/* join "all MLDv2-capable routers" group */
-	inet_pton(AF_INET6, MLD2_CAPABLE_ROUTERS, &(req.ipv6mr_multiaddr));
-	req.ipv6mr_interface = 0; /* default interface */
-	ret = setsockopt(s, IPPROTO_IPV6, IPV6_ADD_MEMBERSHIP, &req, sizeof(req));
-	assert(ret != -1);
+	getifaddrs(&ifaddr);
+	for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
+		if (ifa->ifa_addr->sa_family !=AF_INET6) continue; /* ipv6 only */
+
+		/* join "all MLDv2-capable routers" group */
+		inet_pton(AF_INET6, MLD2_CAPABLE_ROUTERS, &(req.ipv6mr_multiaddr));
+		req.ipv6mr_interface = if_nametoindex(ifa->ifa_name);
+		ret = setsockopt(s, IPPROTO_IPV6, IPV6_ADD_MEMBERSHIP, &req, sizeof(req));
+		if (ret != -1) {
+			fprintf(stderr, "listening on interface %s\n", ifa->ifa_name);
+			joins++;
+		}
+	}
+	freeifaddrs(ifaddr);
+
+	if (joins == 0) {
+		fprintf(stderr, "Unable to join on any interfaces\n");
+		return 1;
+	}
 
 	iov.iov_base = buf_recv;
 	iov.iov_len = sizeof(buf_recv);
