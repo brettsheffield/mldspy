@@ -173,30 +173,30 @@ int main(int argc, char **argv)
 		}
 		else {
 			icmp6 = (struct icmp6_hdr *) buf_recv;
-			fprintf(stderr, "msg received (%i bytes, %i type) ",
+			fprintf(stderr, "msg received (%i bytes)\ttype %i => ",
 				(int)bytes, (int)icmp6->icmp6_type);
 			switch (icmp6->icmp6_type) {
 				case ND_ROUTER_SOLICIT:
-					fprintf(stderr, "\tND_ROUTER_SOLICIT");
+					fprintf(stderr, "ND_ROUTER_SOLICIT");
 					break;
 				case ND_ROUTER_ADVERT:
-					fprintf(stderr, "\tND_ROUTER_ADVERT");
+					fprintf(stderr, "ND_ROUTER_ADVERT");
 					break;
 				case ND_NEIGHBOR_SOLICIT:
-					fprintf(stderr, "\tND_NEIGHBOR_SOLICIT");
+					fprintf(stderr, "ND_NEIGHBOR_SOLICIT");
 					break;
 				case ND_NEIGHBOR_ADVERT:
-					fprintf(stderr, "\tND_NEIGHBOR_ADVERT");
+					fprintf(stderr, "ND_NEIGHBOR_ADVERT");
 					break;
 				case ND_REDIRECT:
-					fprintf(stderr, "\tND_REDIRECT");
+					fprintf(stderr, "ND_REDIRECT");
 					break;
 				case MLD2_LISTEN_REPORT:
-					fprintf(stderr, "\tMLD2_LISTEN_REPORT");
+					fprintf(stderr, "MLD2_LISTEN_REPORT");
 
 					/* number of mcast address records */
 					rec = ntohs(icmp6->icmp6_data16[1]);
-					fprintf(stderr, " records=%i", rec);
+					fprintf(stderr, " (records=%i)", rec);
 
 					/* process the Multicast Address Record(s) */
 					mrec = (struct mar *)(buf_recv + MLD2_HEADER_SIZE);
@@ -209,6 +209,7 @@ int main(int argc, char **argv)
 					}
 					break;
 				default:
+					fprintf(stderr, "UNKNOWN");
 					break;
 			}
 			fprintf(stderr, "\n");
