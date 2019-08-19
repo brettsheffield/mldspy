@@ -56,7 +56,7 @@ struct in6_pktinfo
 #endif
 
 typedef enum {
-	FILTER_MODE_INCLUDE,
+	FILTER_MODE_INCLUDE = 1,
 	FILTER_MODE_EXCLUDE,
 } filter_mode_t;
 
@@ -65,6 +65,7 @@ typedef struct mld_source_t {
 	uint32_t		src_timer;	/* source timer */
 	struct mld_group_t *	group;		/* parent MLD group */
 	struct mld_source_t *	next;
+	struct mld_source_t *	prev;
 } mld_source_t;
 
 typedef struct mld_group_t {
@@ -98,10 +99,10 @@ struct mld2 {
 static int sock = 0;
 static mld_group_t *groups = NULL;
 
-/* free generic linked-list */
-void free_list(void *g)
+/* free source linked-list */
+void free_source(mld_source_t *g)
 {
-	for (mld_group_t *ptr = g; g; ptr = g) {
+	for (mld_source_t *ptr = g; g; ptr = g) {
 		g = ptr->next;
 		free(ptr);
 	}
@@ -113,8 +114,8 @@ void free_group(mld_group_t *g)
 {
 	for (mld_group_t *ptr = g; g; ptr = g) {
 		g = ptr->next;
-		free_list(ptr->src_inc);
-		free_list(ptr->src_exc);
+		free_source(ptr->src_inc);
+		free_source(ptr->src_exc);
 		free(ptr);
 	}
 	g = NULL;
@@ -148,6 +149,66 @@ mld_group_t * group_record(struct in6_addr addr, int iface)
 	g->iface = iface;
 
 	return g;
+}
+
+mld_source_t * get_source_record(mld_source_t *list, struct in6_addr *addr)
+{
+	mld_source_t *l, *prev = NULL;
+
+	for (l = list; l; l = l->next) {
+		l->prev = prev;
+		prev = l;
+		if (memcmp(&(list->addr), addr, sizeof(struct in6_addr)) == 0)
+			break;
+	}
+
+	return l;
+}
+
+void add_source_record(mld_group_t *group, struct in6_addr *addr)
+{
+	mld_source_t *list, *src;
+
+	list = (group->mode == FILTER_MODE_INCLUDE) ? group->src_inc : group->src_exc;
+	src = get_source_record(list, addr);
+	if (src) {
+		/* TODO: update timer */
+		fprintf(stderr, ANSI_COLOR_MAGENTA " (existing source)\n" ANSI_COLOR_RESET);
+	}
+	else {
+		src = calloc(1, sizeof(mld_source_t));
+		src->addr = *addr;
+		src->group = group;
+		/* TODO: add timer */
+		if (group->mode == FILTER_MODE_INCLUDE)
+			group->src_inc = src;
+		else
+			group->src_exc = src;
+	}
+}
+
+void del_source_record(mld_group_t *group, struct in6_addr *addr)
+{
+	mld_source_t *list, *src;
+
+	list = (group->mode == FILTER_MODE_INCLUDE) ? group->src_inc : group->src_exc;
+	src = get_source_record(list, addr);
+	if (src) {
+		fprintf(stderr, ANSI_COLOR_MAGENTA" (deleting source)\n" ANSI_COLOR_RESET);
+		if (src->next) {
+			/* remove links to this source before freeing */
+			src->prev->next = src->next;
+			src->next->prev = src->prev;
+		}
+		if (src == list) {
+			/* no sources left, remove group link */
+			if (group->mode == FILTER_MODE_INCLUDE)
+				group->src_inc = NULL;
+			else
+				group->src_exc = NULL;
+		}
+		free(src);
+	}
 }
 
 void handle_sigint()
@@ -220,10 +281,14 @@ void * process_multicast_address_record(struct mar *mrec, int ifidx)
 			break;
 		case ALLOW_NEW_SOURCES:
 			fprintf(stderr, ANSI_COLOR_GREEN "");
-			fprintf(stderr, "\n\tALLOW_NEW_SOURCES ");
+			if (g->mode == 0)
+				g->mode = FILTER_MODE_INCLUDE;
+			fprintf(stderr, "\n\tALLOW_NEW_SOURCES mode=%i", g->mode);
 			break;
 		case BLOCK_OLD_SOURCES:
 			fprintf(stderr, ANSI_COLOR_RED "");
+			if (g->mode == 0)
+				g->mode = FILTER_MODE_EXCLUDE;
 			fprintf(stderr, "\n\tBLOCK_OLD_SOURCES ");
 			break;
 		default:
@@ -242,7 +307,12 @@ void * process_multicast_address_record(struct mar *mrec, int ifidx)
 	for (int i = 0; i < source_count; i++) {
 		inet_ntop(AF_INET6, (++src)->s6_addr, straddr, INET6_ADDRSTRLEN);
 		fprintf(stderr, "\n\t\tsource=%s", straddr);
-		/* TODO: write source addresses */
+
+		/* write source addresses */
+		if (mrec->mar_type == BLOCK_OLD_SOURCES)
+			del_source_record(g, src);
+		else
+			add_source_record(g, src);
 	}
 
 	fprintf(stderr, ANSI_COLOR_RESET "");
