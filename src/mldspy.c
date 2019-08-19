@@ -124,21 +124,22 @@ void free_group(mld_group_t *g)
 /* return new or matching group record */
 mld_group_t * group_record(struct in6_addr addr, int iface)
 {
-	mld_group_t *g, *t;
+	mld_group_t *g, *t, *prev;
 
 	if (groups) {
 		/* find matching group+interface in linked list */
-		for (t = groups; t->next; t = t->next) {
+		for (prev = t = groups; t; t = t->next) {
 			/* match found, return it */
 			if ((memcmp(&(t->addr), &addr, sizeof(struct in6_addr)) == 0)
 			&& (t->iface == iface))
 			{
 				return t;
 			}
+			prev = t;
 		}
 		/* no match, allocate new struct */
 		g = calloc(1, sizeof(struct mld_group_t));
-		t->next = g;
+		if (prev) prev->next = g;
 	}
 	else {
 		/* first time, allocate new struct */
