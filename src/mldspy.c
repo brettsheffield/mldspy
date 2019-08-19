@@ -201,6 +201,8 @@ void del_source_record(mld_group_t *group, struct in6_addr *addr)
 			*list = src->next; /* update group link */
 		free(src);
 	}
+	else
+		fprintf(stderr, ANSI_COLOR_MAGENTA" (source does not exist, skipping)\n" ANSI_COLOR_RESET);
 }
 
 void handle_sigint()
