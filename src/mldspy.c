@@ -167,10 +167,10 @@ mld_source_t * get_source_record(mld_source_t *list, struct in6_addr *addr)
 
 void add_source_record(mld_group_t *group, struct in6_addr *addr)
 {
-	mld_source_t *list, *src;
+	mld_source_t **list, *src;
 
-	list = (group->mode == FILTER_MODE_INCLUDE) ? group->src_inc : group->src_exc;
-	src = get_source_record(list, addr);
+	list = (group->mode == FILTER_MODE_INCLUDE) ? &(group->src_inc) : &(group->src_exc);
+	src = get_source_record(*list, addr);
 	if (src) {
 		/* TODO: update timer */
 		fprintf(stderr, ANSI_COLOR_MAGENTA " (existing source)\n" ANSI_COLOR_RESET);
@@ -180,19 +180,16 @@ void add_source_record(mld_group_t *group, struct in6_addr *addr)
 		src->addr = *addr;
 		src->group = group;
 		/* TODO: add timer */
-		if (group->mode == FILTER_MODE_INCLUDE)
-			group->src_inc = src;
-		else
-			group->src_exc = src;
+		*list = src;
 	}
 }
 
 void del_source_record(mld_group_t *group, struct in6_addr *addr)
 {
-	mld_source_t *list, *src;
+	mld_source_t **list, *src;
 
-	list = (group->mode == FILTER_MODE_INCLUDE) ? group->src_inc : group->src_exc;
-	src = get_source_record(list, addr);
+	list = (group->mode == FILTER_MODE_INCLUDE) ? &(group->src_inc) : &(group->src_exc);
+	src = get_source_record(*list, addr);
 	if (src) {
 		fprintf(stderr, ANSI_COLOR_MAGENTA" (deleting source)\n" ANSI_COLOR_RESET);
 		if (src->next) {
@@ -200,13 +197,8 @@ void del_source_record(mld_group_t *group, struct in6_addr *addr)
 			src->prev->next = src->next;
 			src->next->prev = src->prev;
 		}
-		if (src == list) {
-			/* update group link */
-			if (group->mode == FILTER_MODE_INCLUDE)
-				group->src_inc = src->next;
-			else
-				group->src_exc = src->next;
-		}
+		if (src == *list)
+			*list = src->next; /* update group link */
 		free(src);
 	}
 }
