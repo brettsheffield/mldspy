@@ -201,11 +201,11 @@ void del_source_record(mld_group_t *group, struct in6_addr *addr)
 			src->next->prev = src->prev;
 		}
 		if (src == list) {
-			/* no sources left, remove group link */
+			/* update group link */
 			if (group->mode == FILTER_MODE_INCLUDE)
-				group->src_inc = NULL;
+				group->src_inc = src->next;
 			else
-				group->src_exc = NULL;
+				group->src_exc = src->next;
 		}
 		free(src);
 	}
