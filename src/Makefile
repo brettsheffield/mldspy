@@ -2,7 +2,7 @@
 
 PROGRAM:=mldspy
 OBJECTS:=mldspy.o
-LIBS:=
+LIBS:=-lrt
 
 .PHONY:		all clean realclean
 

@@ -16,6 +16,7 @@
 #include <sys/ioctl.h>
 #include <sys/socket.h>
 #include <sys/types.h>
+#include <time.h>
 #include <unistd.h>
 
 #define BUFSIZE 1500
@@ -46,6 +47,10 @@
 
 #define MLD2_HEADER_SIZE 8
 
+#define TIMER_SIG SIGRTMIN
+
+#define MLD_RECORD_EXPIRE 10
+
 #if !__USE_KERNEL_IPV6_DEFS
 /* IPv6 packet information.  */
 struct in6_pktinfo
@@ -62,7 +67,7 @@ typedef enum {
 
 typedef struct mld_source_t {
 	struct in6_addr		addr;		/* source address */
-	uint32_t		src_timer;	/* source timer */
+	time_t			last;		/* source last refreshed */
 	struct mld_group_t *	group;		/* parent MLD group */
 	struct mld_source_t *	next;
 	struct mld_source_t *	prev;
@@ -70,7 +75,7 @@ typedef struct mld_source_t {
 
 typedef struct mld_group_t {
 	struct in6_addr		addr;		/* Multicast Address */
-	uint32_t		filter_timer;	/* Filter Timer */
+	time_t			last;		/* group last refreshed */
 	int			iface;		/* Network Interface */
 	filter_mode_t		mode;		/* Router Filter Mode */
 	struct mld_source_t *	src_inc;	/* Include (Requested) List */
@@ -98,6 +103,8 @@ struct mld2 {
 
 static int sock = 0;
 static mld_group_t *groups = NULL;
+static timer_t tid;
+static int timer_expiry = 0;
 
 /* free source linked-list */
 void free_source(mld_source_t *g)
@@ -109,16 +116,39 @@ void free_source(mld_source_t *g)
 	g = NULL;
 }
 
-/* free group linked-list */
+/* free single group */
 void free_group(mld_group_t *g)
+{
+	free_source(g->src_inc);
+	free_source(g->src_exc);
+	free(g);
+	g = NULL;
+}
+
+/* free group linked-list */
+void free_groups(mld_group_t *g)
 {
 	for (mld_group_t *ptr = g; g; ptr = g) {
 		g = ptr->next;
-		free_source(ptr->src_inc);
-		free_source(ptr->src_exc);
-		free(ptr);
+		free_group(ptr);
 	}
 	g = NULL;
+}
+
+void set_timer(time_t *t)
+{
+	struct itimerspec ts = {};
+
+	*t = time(NULL); /* update record timestamp */
+
+	/* set timer if not already set */
+	timer_gettime(tid, &ts);
+	if (ts.it_value.tv_sec == 0 && ts.it_value.tv_nsec == 0) {
+		ts.it_value.tv_sec = MLD_RECORD_EXPIRE;
+		timer_settime(tid, 0, &ts, NULL);
+
+		fprintf(stderr, ANSI_COLOR_MAGENTA " RESTARTING TIMER \n" ANSI_COLOR_RESET);
+	}
 }
 
 /* return new or matching group record */
@@ -173,14 +203,14 @@ void add_source_record(mld_group_t *group, struct in6_addr *addr)
 	list = (group->mode == FILTER_MODE_INCLUDE) ? &(group->src_inc) : &(group->src_exc);
 	src = get_source_record(*list, addr);
 	if (src) {
-		/* TODO: update timer */
+		set_timer(&(src->last));
 		fprintf(stderr, ANSI_COLOR_MAGENTA " (existing source)\n" ANSI_COLOR_RESET);
 	}
 	else {
 		src = calloc(1, sizeof(mld_source_t));
 		src->addr = *addr;
 		src->group = group;
-		/* TODO: add timer */
+		set_timer(&(src->last));
 		*list = src;
 	}
 }
@@ -206,12 +236,67 @@ void del_source_record(mld_group_t *group, struct in6_addr *addr)
 		fprintf(stderr, ANSI_COLOR_MAGENTA" (source does not exist, skipping)\n" ANSI_COLOR_RESET);
 }
 
+/* loop through group and source records, deleting any expired */
+void expire_records() {
+	struct itimerspec ts = {};
+	mld_group_t *g, *prev;
+	time_t now = time(NULL); /* check time once */
+	time_t t = now - MLD_RECORD_EXPIRE; /* expire anything older */
+	time_t tnext = now;
+	time_t sec = 0;
+	char straddr[INET6_ADDRSTRLEN];
+
+	timer_expiry = 0;
+
+	fprintf(stderr, "\n-- timer --\n");
+	if (groups) {
+		for (prev = g = groups; g; ) {
+			inet_ntop(AF_INET6, g->addr.s6_addr, straddr, INET6_ADDRSTRLEN);
+			fprintf(stderr, "%s (%i) ", straddr, g->iface);
+			if (t > g->last) {
+				/* record expired */
+				sec = t - g->last;
+				fprintf(stderr, ANSI_COLOR_RED "EXPIRED %lis ago\n" ANSI_COLOR_RESET, sec);
+				if (groups == prev) { /* first record */
+					prev = groups = g->next;
+					free_group(g);
+					g = groups;
+					continue;
+				}
+				prev->next = g->next;
+				free_group(g);
+				g = prev;
+			}
+			else {
+				/* record not expired */
+				sec = now - g->last;
+				fprintf(stderr, ANSI_COLOR_GREEN "age %lis\n" ANSI_COLOR_RESET, sec);
+				if (g->last < tnext) tnext = g->last;
+			}
+			prev = g;
+			g = g->next;
+		}
+	}
+
+	/* reset timer based on next record to expire */
+	ts.it_value.tv_sec = MLD_RECORD_EXPIRE - (now - tnext) + 1;
+	fprintf(stderr, "-- next timer: %lis --\n", ts.it_value.tv_sec);
+	timer_settime(tid, 0, &ts, NULL);
+}
+
 void handle_sigint()
 {
-	free_group(groups);
+	timer_delete(tid);
+	free_groups(groups);
 	close(sock);
 
 	_exit(0);
+}
+
+void handle_timer()
+{
+	timer_expiry = 1;
+	return;
 }
 
 /* extract interface number from ancillary control data */
@@ -231,7 +316,6 @@ int interface_index(struct msghdr msg)
 	return ifidx;
 }
 
-
 void * process_multicast_address_record(struct mar *mrec, int ifidx)
 {
 	char straddr[INET6_ADDRSTRLEN];
@@ -244,8 +328,8 @@ void * process_multicast_address_record(struct mar *mrec, int ifidx)
 	addr = mrec->mar_address;
 
 	/* find/allocate record for this address/interface combo */
-	g = group_record(addr, ifidx);
-	assert(g);
+	g = group_record(addr, ifidx); assert(g);
+	set_timer(&(g->last)); /* refresh timestamp */
 
 	switch (mrec->mar_type) {
 		case MODE_IS_INCLUDE:
@@ -329,6 +413,8 @@ int main(int argc, char **argv)
 	struct icmp6_hdr *icmp6;
 	struct ifaddrs *ifaddr, *ifa;
 	struct mar *mrec;
+	struct sigaction sa = {};
+	struct sigevent sev = {};
 	char buf_recv[BUFSIZE];
 	char buf_ctrl[BUFSIZE];
 	char buf_name[BUFSIZE];
@@ -371,10 +457,21 @@ int main(int argc, char **argv)
 	msg.msg_iovlen = 1;
 	msg.msg_flags = 0;
 
+	/* prepare timer and handler */
+	sa.sa_flags = SA_SIGINFO;
+	sa.sa_sigaction = handle_timer;
+	sigemptyset(&sa.sa_mask);
+	sigaction(TIMER_SIG, &sa, NULL);
+	sev.sigev_notify = SIGEV_SIGNAL;
+	sev.sigev_signo = TIMER_SIG;
+	timer_create(CLOCK_REALTIME, &sev, &tid);
+
 	signal(SIGINT, handle_sigint);
 
 	for (;;) {
+		if (timer_expiry) expire_records(); /* check timer before syscall */
 		bytes = recvmsg(sock, &msg, 0);
+		if (timer_expiry) expire_records(); /* syscall interrupted */
 		if (bytes < 0) {
 			perror("recvmsg");
 			if (errno == EINTR)
