@@ -240,7 +240,7 @@ void expire_sources(mld_source_t **top)
 {
 	mld_source_t *prev, *src;
 	time_t now = time(NULL); /* check time once */
-	time_t t = now - 5; /* expire anything older */
+	time_t t = now - MLD_RECORD_EXPIRE; /* expire anything older */
 
 	for (prev = src = *top; src; ) {
 		if (t > src->last) {
