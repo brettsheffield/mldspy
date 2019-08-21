@@ -236,11 +236,12 @@ void del_source_record(mld_group_t *group, struct in6_addr *addr)
 		fprintf(stderr, ANSI_COLOR_MAGENTA" (source does not exist, skipping)\n" ANSI_COLOR_RESET);
 }
 
-void expire_sources(mld_source_t **top)
+time_t expire_sources(mld_source_t **top)
 {
 	mld_source_t *prev = NULL, *src;
 	time_t now = time(NULL); /* check time once */
 	time_t t = now - MLD_RECORD_EXPIRE; /* expire anything older */
+	time_t tnext = now;
 
 	for (src = *top; src; ) {
 		if (t > src->last) {
@@ -256,10 +257,11 @@ void expire_sources(mld_source_t **top)
 			free_source(src);
 			src = prev->next;
 		}
+		if (src->last < tnext) tnext = src->last;
 		prev = src;
 		src = src->next;
 	}
-	/* TODO: return time_t for next expiry */
+	return tnext;
 }
 
 /* loop through group and source records, deleting any expired */
@@ -295,8 +297,10 @@ void expire_records() {
 			}
 			else {
 				/* record not expired */
-				expire_sources(&(g->src_inc));
-				expire_sources(&(g->src_exc));
+				sec = expire_sources(&(g->src_inc));
+				if (sec < tnext) tnext = sec;
+				sec = expire_sources(&(g->src_exc));
+				if (sec < tnext) tnext = sec;
 				sec = now - g->last;
 				fprintf(stderr, ANSI_COLOR_GREEN "age %lis\n" ANSI_COLOR_RESET, sec);
 				if (g->last < tnext) tnext = g->last;
