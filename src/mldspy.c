@@ -238,16 +238,16 @@ void del_source_record(mld_group_t *group, struct in6_addr *addr)
 
 void expire_sources(mld_source_t **top)
 {
-	mld_source_t *prev, *src;
+	mld_source_t *prev = NULL, *src;
 	time_t now = time(NULL); /* check time once */
 	time_t t = now - MLD_RECORD_EXPIRE; /* expire anything older */
 
-	for (prev = src = *top; src; ) {
+	for (src = *top; src; ) {
 		if (t > src->last) {
 			/* source expired */
 			fprintf(stderr, "\t source expired\n");
-			if (*top == src) {
-				prev = *top = src->next;
+			if (!prev) { /* first record */
+				*top = src->next;
 				free_source(src);
 				src = *top;
 				continue;
@@ -259,12 +259,13 @@ void expire_sources(mld_source_t **top)
 		prev = src;
 		src = src->next;
 	}
+	/* TODO: return time_t for next expiry */
 }
 
 /* loop through group and source records, deleting any expired */
 void expire_records() {
 	struct itimerspec ts = {};
-	mld_group_t *g, *prev;
+	mld_group_t *g, *prev = NULL;
 	time_t now = time(NULL); /* check time once */
 	time_t t = now - MLD_RECORD_EXPIRE; /* expire anything older */
 	time_t tnext = now;
@@ -275,15 +276,15 @@ void expire_records() {
 
 	fprintf(stderr, "\n-- timer --\n");
 	if (groups) {
-		for (prev = g = groups; g; ) {
+		for (g = groups; g; ) {
 			inet_ntop(AF_INET6, g->addr.s6_addr, straddr, INET6_ADDRSTRLEN);
 			fprintf(stderr, "%s (%i) ", straddr, g->iface);
 			if (t > g->last) {
 				/* record expired */
 				sec = t - g->last;
 				fprintf(stderr, ANSI_COLOR_RED "EXPIRED %lis ago\n" ANSI_COLOR_RESET, sec);
-				if (groups == prev) { /* first record */
-					prev = groups = g->next;
+				if (!prev) { /* first record */
+					groups = g->next;
 					free_group(g);
 					g = groups;
 					continue;
