@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include "log.h"
 #include "misc.h"
+#include "mldspy.h"
 
 void logmsg(unsigned int level, const char *fmt, ...)
 {
@@ -17,7 +18,10 @@ void logmsg(unsigned int level, const char *fmt, ...)
 	assert(b != NULL);
 	vsprintf(b, fmt, argp);
 	va_end(argp);
-	fprintf(stderr, "%s\n", b);
+	wprintw(win_logs, "%s", b);
+	wrefresh(win_logs);
+	wrefresh(win_stat);
+
 	free(b);
 }
 

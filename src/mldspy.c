@@ -1,9 +1,11 @@
-#include "color.h"
+#include "log.h"
 #include "mldspy.h"
 #include <arpa/inet.h>
 #include <assert.h>
 #include <errno.h>
 #include <ifaddrs.h>
+#include <curses.h>
+#include <locale.h>
 #include <net/if.h>
 #include <netdb.h>
 #include <netinet/icmp6.h>
@@ -106,6 +108,59 @@ static mld_group_t *groups = NULL;
 static timer_t tid;
 static int timer_expiry = 0;
 
+void display_init() __attribute__((always_inline));
+
+void inline display_init()
+{
+	int x, y, odd;
+
+	setlocale(LC_ALL, "");
+	initscr(); cbreak(); noecho(); curs_set(0);
+	nonl();
+	intrflush(stdscr, FALSE);
+	keypad(stdscr, TRUE);
+	getmaxyx(stdscr, y, x);
+	odd = y % 2;
+	win_stat = newwin(y/2 - odd, x, 0, 0);
+	win_logs = newwin(y/2 + odd, x, y/2, 0);
+	scrollok(win_logs, TRUE);
+	wclear(win_stat);
+	wclear(win_logs);
+	wrefresh(win_stat);
+	wrefresh(win_logs);
+}
+
+void display_update()
+{
+	int x, y, len;
+	char buf[128];
+	char straddr[INET6_ADDRSTRLEN];
+	char ifname[IF_NAMESIZE];
+
+	getmaxyx(win_stat, y, x);
+	len = snprintf(buf, sizeof(buf), "%s v%s", PROGRAM_NAME, PROGRAM_VERSION);
+
+	wclear(win_stat);
+
+	mvwprintw(win_stat, 0, x/2 - len/2, buf);
+	for (int i = 1; i < x; i++) {
+		mvwprintw(win_stat, y - 1, i, "-");
+	}
+
+	/* display cached MLD records */
+	mld_group_t *g;
+	if ((g = groups)) {
+		for (int i = 1; g; g = g->next) {
+			inet_ntop(AF_INET6, g->addr.s6_addr, straddr, INET6_ADDRSTRLEN);
+			if_indextoname(g->iface, ifname);
+			mvwprintw(win_stat, i++, 0, "%s (%s)", straddr, ifname);
+			if (i > (y - 2)) break;
+		}
+	}
+
+	wrefresh(win_stat);
+}
+
 /* free source linked-list */
 void free_source(mld_source_t *g)
 {
@@ -147,7 +202,7 @@ void set_timer(time_t *t)
 		ts.it_value.tv_sec = MLD_RECORD_EXPIRE;
 		timer_settime(tid, 0, &ts, NULL);
 
-		fprintf(stderr, ANSI_COLOR_MAGENTA " RESTARTING TIMER \n" ANSI_COLOR_RESET);
+		logmsg(LOG_INFO, " RESTARTING TIMER \n");
 	}
 }
 
@@ -204,7 +259,7 @@ void add_source_record(mld_group_t *group, struct in6_addr *addr)
 	src = get_source_record(*list, addr);
 	if (src) {
 		set_timer(&(src->last));
-		fprintf(stderr, ANSI_COLOR_MAGENTA " (existing source)\n" ANSI_COLOR_RESET);
+		logmsg(LOG_INFO, " (existing source)\n");
 	}
 	else {
 		src = calloc(1, sizeof(mld_source_t));
@@ -222,7 +277,7 @@ void del_source_record(mld_group_t *group, struct in6_addr *addr)
 	list = (group->mode == FILTER_MODE_INCLUDE) ? &(group->src_inc) : &(group->src_exc);
 	src = get_source_record(*list, addr);
 	if (src) {
-		fprintf(stderr, ANSI_COLOR_MAGENTA" (deleting source)\n" ANSI_COLOR_RESET);
+		logmsg(LOG_INFO, " (deleting source)\n");
 		if (src->next) {
 			/* remove links to this source before freeing */
 			src->prev->next = src->next;
@@ -233,7 +288,7 @@ void del_source_record(mld_group_t *group, struct in6_addr *addr)
 		free(src);
 	}
 	else
-		fprintf(stderr, ANSI_COLOR_MAGENTA" (source does not exist, skipping)\n" ANSI_COLOR_RESET);
+		logmsg(LOG_INFO, " (source does not exist, skipping)\n");
 }
 
 time_t expire_sources(mld_source_t **top)
@@ -246,7 +301,7 @@ time_t expire_sources(mld_source_t **top)
 	for (src = *top; src; ) {
 		if (t > src->last) {
 			/* source expired */
-			fprintf(stderr, "\t source expired\n");
+			logmsg(LOG_INFO, "\t source expired\n");
 			if (!prev) { /* first record */
 				*top = src->next;
 				free_source(src);
@@ -276,15 +331,15 @@ void expire_records() {
 
 	timer_expiry = 0;
 
-	fprintf(stderr, "\n-- timer --\n");
+	logmsg(LOG_INFO, "\n-- timer --\n");
 	if (groups) {
 		for (g = groups; g; ) {
 			inet_ntop(AF_INET6, g->addr.s6_addr, straddr, INET6_ADDRSTRLEN);
-			fprintf(stderr, "%s (%i) ", straddr, g->iface);
+			logmsg(LOG_INFO, "%s (%i) ", straddr, g->iface);
 			if (t > g->last) {
 				/* record expired */
 				sec = t - g->last;
-				fprintf(stderr, ANSI_COLOR_RED "EXPIRED %lis ago\n" ANSI_COLOR_RESET, sec);
+				logmsg(LOG_INFO, "EXPIRED %lis ago\n", sec);
 				if (!prev) { /* first record */
 					groups = g->next;
 					free_group(g);
@@ -302,7 +357,7 @@ void expire_records() {
 				sec = expire_sources(&(g->src_exc));
 				if (sec < tnext) tnext = sec;
 				sec = now - g->last;
-				fprintf(stderr, ANSI_COLOR_GREEN "age %lis\n" ANSI_COLOR_RESET, sec);
+				logmsg(LOG_INFO, "age %lis\n", sec);
 				if (g->last < tnext) tnext = g->last;
 			}
 			prev = g;
@@ -312,8 +367,10 @@ void expire_records() {
 
 	/* reset timer based on next record to expire */
 	ts.it_value.tv_sec = MLD_RECORD_EXPIRE - (now - tnext) + 1;
-	fprintf(stderr, "-- next timer: %lis --\n", ts.it_value.tv_sec);
+	logmsg(LOG_INFO, "-- next timer: %lis --\n", ts.it_value.tv_sec);
 	timer_settime(tid, 0, &ts, NULL);
+
+	display_update();
 }
 
 void handle_sigint()
@@ -321,6 +378,11 @@ void handle_sigint()
 	timer_delete(tid);
 	free_groups(groups);
 	close(sock);
+
+	/* ncurses cleanup */
+	delwin(win_logs);
+	delwin(win_stat);
+	endwin();
 
 	_exit(0);
 }
@@ -365,59 +427,49 @@ void * process_multicast_address_record(struct mar *mrec, int ifidx)
 
 	switch (mrec->mar_type) {
 		case MODE_IS_INCLUDE:
-			if (g->mode != FILTER_MODE_INCLUDE)
-				fprintf(stderr, ANSI_COLOR_YELLOW "");
 			g->mode = FILTER_MODE_INCLUDE;
-			fprintf(stderr, "\n\tMODE_IS_INCLUDE ");
+			logmsg(LOG_INFO, "\n\tMODE_IS_INCLUDE ");
 			break;
 		case MODE_IS_EXCLUDE:
-			if (g->mode != FILTER_MODE_EXCLUDE)
-				fprintf(stderr, ANSI_COLOR_YELLOW "");
 			g->mode = FILTER_MODE_EXCLUDE;
-			fprintf(stderr, "\n\tMODE_IS_EXCLUDE ");
+			logmsg(LOG_INFO, "\n\tMODE_IS_EXCLUDE ");
 			break;
 		case CHANGE_TO_INCLUDE_MODE:
-			if (g->mode != FILTER_MODE_INCLUDE)
-				fprintf(stderr, ANSI_COLOR_YELLOW "");
 			g->mode = FILTER_MODE_INCLUDE;
-			fprintf(stderr, "\n\tCHANGE_TO_INCLUDE_MODE ");
-			if (source_count == 0) fprintf(stderr, " INCLUDE NULL => PART");
+			logmsg(LOG_INFO, "\n\tCHANGE_TO_INCLUDE_MODE ");
+			if (source_count == 0) logmsg(LOG_INFO, " INCLUDE NULL => PART");
 			break;
 		case CHANGE_TO_EXCLUDE_MODE:
-			if (g->mode != FILTER_MODE_EXCLUDE)
-				fprintf(stderr, ANSI_COLOR_YELLOW "");
 			g->mode = FILTER_MODE_EXCLUDE;
-			fprintf(stderr, "\n\tCHANGE_TO_EXCLUDE_MODE ");
-			if (source_count == 0) fprintf(stderr, " EXCLUDE NULL => JOIN(ASM) ");
+			logmsg(LOG_INFO, "\n\tCHANGE_TO_EXCLUDE_MODE ");
+			if (source_count == 0) logmsg(LOG_INFO, " EXCLUDE NULL => JOIN(ASM) ");
 			break;
 		case ALLOW_NEW_SOURCES:
-			fprintf(stderr, ANSI_COLOR_GREEN "");
 			if (g->mode == 0)
 				g->mode = FILTER_MODE_INCLUDE;
-			fprintf(stderr, "\n\tALLOW_NEW_SOURCES mode=%i", g->mode);
+			logmsg(LOG_INFO, "\n\tALLOW_NEW_SOURCES mode=%i", g->mode);
 			break;
 		case BLOCK_OLD_SOURCES:
-			fprintf(stderr, ANSI_COLOR_RED "");
 			if (g->mode == 0)
 				g->mode = FILTER_MODE_EXCLUDE;
-			fprintf(stderr, "\n\tBLOCK_OLD_SOURCES ");
+			logmsg(LOG_INFO, "\n\tBLOCK_OLD_SOURCES ");
 			break;
 		default:
-			fprintf(stderr, "\n\t(UNKNOWN MODE) ");
+			logmsg(LOG_INFO, "\n\t(UNKNOWN MODE) ");
 			break;
 	}
 
 	inet_ntop(AF_INET6, addr.s6_addr, straddr, INET6_ADDRSTRLEN);
-	fprintf(stderr, "\n\tmulticast group addr=%s", straddr);
-	fprintf(stderr, " mode=%i", mrec->mar_type);
-	fprintf(stderr, " auxlen=%i", mrec->mar_auxlen);
-	fprintf(stderr, " sources=%i", source_count);
+	logmsg(LOG_INFO, "\n\tmulticast group addr=%s", straddr);
+	logmsg(LOG_INFO, " mode=%i", mrec->mar_type);
+	logmsg(LOG_INFO, " auxlen=%i", mrec->mar_auxlen);
+	logmsg(LOG_INFO, " sources=%i", source_count);
 
 	/* loop through source addresses */
 	src = &(mrec->mar_address); /* actually ptr to in6_addr *before* src */
 	for (int i = 0; i < source_count; i++) {
 		inet_ntop(AF_INET6, (++src)->s6_addr, straddr, INET6_ADDRSTRLEN);
-		fprintf(stderr, "\n\t\tsource=%s", straddr);
+		logmsg(LOG_INFO, "\n\t\tsource=%s", straddr);
 
 		/* write source addresses */
 		if (mrec->mar_type == BLOCK_OLD_SOURCES)
@@ -426,7 +478,8 @@ void * process_multicast_address_record(struct mar *mrec, int ifidx)
 			add_source_record(g, src);
 	}
 
-	fprintf(stderr, ANSI_COLOR_RESET "");
+	/* show user what happened */
+	display_update();
 
 	/* return pointer to next record */
 	src++;
@@ -479,16 +532,6 @@ int main(int argc, char **argv)
 		return 1;
 	}
 
-	iov[0].iov_base = buf_recv;
-	iov[0].iov_len = BUFSIZE;
-	msg.msg_control = buf_ctrl;
-	msg.msg_controllen = BUFSIZE;
-	msg.msg_name = buf_name;
-	msg.msg_namelen = BUFSIZE;
-	msg.msg_iov = iov;
-	msg.msg_iovlen = 1;
-	msg.msg_flags = 0;
-
 	/* prepare timer and handler */
 	sa.sa_flags = SA_SIGINFO;
 	sa.sa_sigaction = handle_timer;
@@ -500,48 +543,62 @@ int main(int argc, char **argv)
 
 	signal(SIGINT, handle_sigint);
 
+	/* prepare display */
+	display_init();
+
+	/* initialize message */
+	iov[0].iov_base = buf_recv;
+	iov[0].iov_len = BUFSIZE;
+	msg.msg_control = buf_ctrl;
+	msg.msg_controllen = BUFSIZE;
+	msg.msg_name = buf_name;
+	msg.msg_namelen = BUFSIZE;
+	msg.msg_iov = iov;
+	msg.msg_iovlen = 1;
+	msg.msg_flags = 0;
+
 	for (;;) {
 		if (timer_expiry) expire_records(); /* check timer before syscall */
 		bytes = recvmsg(sock, &msg, 0);
-		if (timer_expiry) expire_records(); /* syscall interrupted */
+		if (timer_expiry) { expire_records(); continue; } /* syscall interrupted */
 		if (bytes < 0) {
 			perror("recvmsg");
 			if (errno == EINTR)
 				continue;
 			else {
-				fprintf(stderr, "recvmsg error\n");
+				logmsg(LOG_INFO, "recvmsg error\n");
 				break;
 			}
 		}
 		else {
 			icmp6 = (struct icmp6_hdr *) buf_recv;
-			fprintf(stderr, "msg received (%i bytes)\ttype %i => ",
+			logmsg(LOG_INFO, "msg received (%i bytes)\ttype %i => ",
 				(int)bytes, (int)icmp6->icmp6_type);
 			switch (icmp6->icmp6_type) {
 				case ND_ROUTER_SOLICIT:
-					fprintf(stderr, "ND_ROUTER_SOLICIT");
+					logmsg(LOG_INFO, "ND_ROUTER_SOLICIT");
 					break;
 				case ND_ROUTER_ADVERT:
-					fprintf(stderr, "ND_ROUTER_ADVERT");
+					logmsg(LOG_INFO, "ND_ROUTER_ADVERT");
 					break;
 				case ND_NEIGHBOR_SOLICIT:
-					fprintf(stderr, "ND_NEIGHBOR_SOLICIT");
+					logmsg(LOG_INFO, "ND_NEIGHBOR_SOLICIT");
 					break;
 				case ND_NEIGHBOR_ADVERT:
-					fprintf(stderr, "ND_NEIGHBOR_ADVERT");
+					logmsg(LOG_INFO, "ND_NEIGHBOR_ADVERT");
 					break;
 				case ND_REDIRECT:
-					fprintf(stderr, "ND_REDIRECT");
+					logmsg(LOG_INFO, "ND_REDIRECT");
 					break;
 				case MLD2_LISTEN_REPORT:
-					fprintf(stderr, "MLD2_LISTEN_REPORT");
+					logmsg(LOG_INFO, "MLD2_LISTEN_REPORT");
 
 					ifidx = interface_index(msg);
-					fprintf(stderr, " iface=%i", ifidx);
+					logmsg(LOG_INFO, " iface=%i", ifidx);
 
 					/* number of mcast address records */
 					rec = ntohs(icmp6->icmp6_data16[1]);
-					fprintf(stderr, " (records=%i)", rec);
+					logmsg(LOG_INFO, " (records=%i)", rec);
 
 					/* process the Multicast Address Record(s) */
 					mrec = (struct mar *)(buf_recv + MLD2_HEADER_SIZE);
@@ -554,10 +611,10 @@ int main(int argc, char **argv)
 					}
 					break;
 				default:
-					fprintf(stderr, "UNKNOWN");
+					logmsg(LOG_INFO, "UNKNOWN");
 					break;
 			}
-			fprintf(stderr, "\n");
+			logmsg(LOG_INFO, "\n");
 		}
 	}
 

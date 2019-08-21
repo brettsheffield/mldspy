@@ -1,4 +1,7 @@
-#define GROUP_RADVD "FF02::1"
-#define GROUP_ALL_ROUTERS "FF02::2"
-#define GROUP_MLRM "FF02::16"
-#define GROUP_WIBBLE "ff3e:f403:800f:35ad:8015:2af4:e6ab:b608"
+#include <curses.h>
+
+#define PROGRAM_NAME "mldspy"
+#define PROGRAM_VERSION "0.0.0-pre0"
+
+WINDOW *win_stat;
+WINDOW *win_logs;

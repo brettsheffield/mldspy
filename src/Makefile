@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 
 PROGRAM:=mldspy
-OBJECTS:=mldspy.o
-LIBS:=-lrt
+OBJECTS:=mldspy.o log.o misc.o
+LIBS:=-lrt -lncurses -ltinfo
 
 .PHONY:		all clean realclean
 
