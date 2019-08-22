@@ -116,14 +116,22 @@ void inline display_init()
 
 	setlocale(LC_ALL, "");
 	initscr(); cbreak(); noecho(); curs_set(0);
-	nonl();
-	intrflush(stdscr, FALSE);
-	keypad(stdscr, TRUE);
+	nonl(); intrflush(stdscr, FALSE); keypad(stdscr, TRUE);
+
 	getmaxyx(stdscr, y, x);
 	odd = y % 2;
 	win_stat = newwin(y/2 - odd, x, 0, 0);
 	win_logs = newwin(y/2 + odd, x, y/2, 0);
 	scrollok(win_logs, TRUE);
+
+	start_color();
+	init_pair(WHITE_ON_BLACK, COLOR_WHITE, COLOR_BLACK);
+	init_pair(BLACK_ON_WHITE, COLOR_BLACK, COLOR_WHITE);
+	init_pair(BLACK_ON_GREEN, COLOR_BLACK, COLOR_GREEN);
+	init_pair(GREEN_ON_BLACK, COLOR_GREEN, COLOR_BLACK);
+	wattron(win_stat, COLOR_PAIR(WHITE_ON_BLACK));
+	wattron(win_logs, COLOR_PAIR(WHITE_ON_BLACK));
+
 	wclear(win_stat);
 	wclear(win_logs);
 	wrefresh(win_stat);
@@ -141,19 +149,22 @@ void display_update()
 	len = snprintf(buf, sizeof(buf), "%s v%s", PROGRAM_NAME, PROGRAM_VERSION);
 
 	wclear(win_stat);
-
-	mvwprintw(win_stat, 0, x/2 - len/2, buf);
-	for (int i = 1; i < x; i++) {
+	wattron(win_stat, COLOR_PAIR(BLACK_ON_WHITE));
+	for (int i = 0; i < x; i++) {
+		mvwprintw(win_stat, 0, i, " ");
 		mvwprintw(win_stat, y - 1, i, "-");
 	}
+	mvwprintw(win_stat, 0, x/2 - len/2, buf);
+	wattron(win_stat, COLOR_PAIR(WHITE_ON_BLACK));
 
 	/* display cached MLD records */
 	mld_group_t *g;
 	if ((g = groups)) {
-		for (int i = 1; g; g = g->next) {
+		for (int i = 0; g; g = g->next) {
 			inet_ntop(AF_INET6, g->addr.s6_addr, straddr, INET6_ADDRSTRLEN);
 			if_indextoname(g->iface, ifname);
-			mvwprintw(win_stat, i++, 0, "%s (%s)", straddr, ifname);
+			mvwprintw(win_stat, ++i, 0, "%s", straddr);
+			mvwprintw(win_stat, i, 38, "| %s", ifname);
 			if (i > (y - 2)) break;
 		}
 	}
