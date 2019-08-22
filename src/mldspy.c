@@ -151,10 +151,10 @@ void display_update()
 	wclear(win_stat);
 	wattron(win_stat, COLOR_PAIR(BLACK_ON_WHITE));
 	for (int i = 0; i < x; i++) {
-		mvwprintw(win_stat, 0, i, " ");
-		mvwprintw(win_stat, y - 1, i, "-");
+		mvwprintw(win_stat, 0, i, " ");		/* status header */
+		mvwprintw(win_stat, y - 1, i, "-");	/* status footer */
 	}
-	mvwprintw(win_stat, 0, x/2 - len/2, buf);
+	mvwprintw(win_stat, 0, x/2 - len/2, buf);	/* program name */
 	wattron(win_stat, COLOR_PAIR(WHITE_ON_BLACK));
 
 	/* display cached MLD records */
