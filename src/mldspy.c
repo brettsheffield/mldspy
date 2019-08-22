@@ -148,6 +148,7 @@ void display_update()
 	char buf[128];
 	char straddr[INET6_ADDRSTRLEN];
 	char ifname[IF_NAMESIZE];
+	char *mode;
 
 	getmaxyx(win_stat, y, x);
 	len = snprintf(buf, sizeof(buf), "%s v%s", PROGRAM_NAME, PROGRAM_VERSION);
@@ -169,6 +170,8 @@ void display_update()
 			if_indextoname(g->iface, ifname);
 			mvwprintw(win_stat, ++i, 0, "%s", straddr);
 			mvwprintw(win_stat, i, 38, "| %s", ifname);
+			mode = (g->mode == FILTER_MODE_EXCLUDE) ? "EXCLUDE" : "INCLUDE";
+			mvwprintw(win_stat, i, 48, "| %s", mode);
 			if (i > (y - 2)) break;
 		}
 	}
