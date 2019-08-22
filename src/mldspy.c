@@ -127,8 +127,9 @@ void inline display_init()
 	start_color();
 	init_pair(WHITE_ON_BLACK, COLOR_WHITE, COLOR_BLACK);
 	init_pair(BLACK_ON_WHITE, COLOR_BLACK, COLOR_WHITE);
-	init_pair(BLACK_ON_GREEN, COLOR_BLACK, COLOR_GREEN);
+	init_pair(YELLOW_ON_BLACK, COLOR_YELLOW, COLOR_BLACK);
 	init_pair(GREEN_ON_BLACK, COLOR_GREEN, COLOR_BLACK);
+	init_pair(RED_ON_BLACK, COLOR_RED, COLOR_BLACK);
 	wattron(win_stat, COLOR_PAIR(WHITE_ON_BLACK));
 	wattron(win_logs, COLOR_PAIR(WHITE_ON_BLACK));
 
@@ -213,7 +214,7 @@ void set_timer(time_t *t)
 		ts.it_value.tv_sec = MLD_RECORD_EXPIRE;
 		timer_settime(tid, 0, &ts, NULL);
 
-		logmsg(LOG_INFO, " RESTARTING TIMER \n");
+		logmsg(LOG_DEBUG, " RESTARTING TIMER \n");
 	}
 }
 
@@ -342,15 +343,15 @@ void expire_records() {
 
 	timer_expiry = 0;
 
-	logmsg(LOG_INFO, "\n-- timer --\n");
+	logmsg(LOG_DEBUG, "\n-- timer --\n");
 	if (groups) {
 		for (g = groups; g; ) {
 			inet_ntop(AF_INET6, g->addr.s6_addr, straddr, INET6_ADDRSTRLEN);
-			logmsg(LOG_INFO, "%s (%i) ", straddr, g->iface);
+			logmsg(LOG_DEBUG, "%s (%i) ", straddr, g->iface);
 			if (t > g->last) {
 				/* record expired */
 				sec = t - g->last;
-				logmsg(LOG_INFO, "EXPIRED %lis ago\n", sec);
+				logmsg(LOG_DEBUG, "EXPIRED %lis ago\n", sec);
 				if (!prev) { /* first record */
 					groups = g->next;
 					free_group(g);
@@ -368,7 +369,7 @@ void expire_records() {
 				sec = expire_sources(&(g->src_exc));
 				if (sec < tnext) tnext = sec;
 				sec = now - g->last;
-				logmsg(LOG_INFO, "age %lis\n", sec);
+				logmsg(LOG_DEBUG, "age %lis\n", sec);
 				if (g->last < tnext) tnext = g->last;
 			}
 			prev = g;
@@ -378,7 +379,7 @@ void expire_records() {
 
 	/* reset timer based on next record to expire */
 	ts.it_value.tv_sec = MLD_RECORD_EXPIRE - (now - tnext) + 1;
-	logmsg(LOG_INFO, "-- next timer: %lis --\n", ts.it_value.tv_sec);
+	logmsg(LOG_DEBUG, "-- next timer: %lis --\n", ts.it_value.tv_sec);
 	timer_settime(tid, 0, &ts, NULL);
 
 	display_update();
@@ -446,21 +447,27 @@ void * process_multicast_address_record(struct mar *mrec, int ifidx)
 			logmsg(LOG_INFO, "\n\tMODE_IS_EXCLUDE ");
 			break;
 		case CHANGE_TO_INCLUDE_MODE:
+			if (g->mode != FILTER_MODE_EXCLUDE)
+				wattron(win_logs, COLOR_PAIR(YELLOW_ON_BLACK));
 			g->mode = FILTER_MODE_INCLUDE;
 			logmsg(LOG_INFO, "\n\tCHANGE_TO_INCLUDE_MODE ");
 			if (source_count == 0) logmsg(LOG_INFO, " INCLUDE NULL => PART");
 			break;
 		case CHANGE_TO_EXCLUDE_MODE:
+			if (g->mode != FILTER_MODE_EXCLUDE)
+				wattron(win_logs, COLOR_PAIR(YELLOW_ON_BLACK));
 			g->mode = FILTER_MODE_EXCLUDE;
 			logmsg(LOG_INFO, "\n\tCHANGE_TO_EXCLUDE_MODE ");
 			if (source_count == 0) logmsg(LOG_INFO, " EXCLUDE NULL => JOIN(ASM) ");
 			break;
 		case ALLOW_NEW_SOURCES:
+			wattron(win_logs, COLOR_PAIR(GREEN_ON_BLACK));
 			if (g->mode == 0)
 				g->mode = FILTER_MODE_INCLUDE;
 			logmsg(LOG_INFO, "\n\tALLOW_NEW_SOURCES mode=%i", g->mode);
 			break;
 		case BLOCK_OLD_SOURCES:
+			wattron(win_logs, COLOR_PAIR(RED_ON_BLACK));
 			if (g->mode == 0)
 				g->mode = FILTER_MODE_EXCLUDE;
 			logmsg(LOG_INFO, "\n\tBLOCK_OLD_SOURCES ");
@@ -469,6 +476,7 @@ void * process_multicast_address_record(struct mar *mrec, int ifidx)
 			logmsg(LOG_INFO, "\n\t(UNKNOWN MODE) ");
 			break;
 	}
+	wattron(win_logs, COLOR_PAIR(WHITE_ON_BLACK));
 
 	inet_ntop(AF_INET6, addr.s6_addr, straddr, INET6_ADDRSTRLEN);
 	logmsg(LOG_INFO, "\n\tmulticast group addr=%s", straddr);

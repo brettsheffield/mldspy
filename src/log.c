@@ -13,6 +13,8 @@ void logmsg(unsigned int level, const char *fmt, ...)
 	va_list argp;
 	char *b;
 
+	if ((level & loglevel) != level) return;
+
 	va_start(argp, fmt);
 	b = malloc(_vscprintf(fmt, argp) + 1);
 	assert(b != NULL);
