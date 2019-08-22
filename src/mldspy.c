@@ -111,6 +111,7 @@ static mld_group_t *groups = NULL;
 static timer_t tid;
 static int timer_expiry = 0;
 static int opt_noexpire = 0;
+int loglevel = 15;
 
 void display_init() __attribute__((always_inline));
 
@@ -540,7 +541,10 @@ int main(int argc, char **argv)
 	uint16_t rec;
 
 	while (--argc) {
-		if (strcmp(argv[argc], "--noexpire") == 0) {
+		if (strcmp(argv[argc], "--debug") == 0) {
+			loglevel = loglevel | LOG_DEBUG;
+		}
+		else if (strcmp(argv[argc], "--noexpire") == 0) {
 			opt_noexpire = 1;
 		}
 		else {

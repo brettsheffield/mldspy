@@ -20,7 +20,7 @@ enum {
 	LOG_LEVELS(LOG_ENUM)
 };
 
-#define loglevel 15
+extern int loglevel;
 
 #define LOG(lvl, fmt, ...) if ((lvl & loglevel) == lvl) logmsg(lvl, fmt __VA_OPT__(,) __VA_ARGS__)
 
