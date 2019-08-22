@@ -12,8 +12,6 @@ all:		$(PROGRAM)
 $(PROGRAM):	$(OBJECTS)
 		$(CC) $(LDFLAGS) -o $(PROGRAM) $(OBJECTS) $(LIBS)
 
-err.o:		err.c err.h
-
 mldspy.o:	mldspy.c mldspy.h
 
 log.o:		log.c log.h
