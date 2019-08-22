@@ -164,6 +164,7 @@ void display_update()
 
 	/* display cached MLD records */
 	mld_group_t *g;
+	mld_source_t *src;
 	if ((g = groups)) {
 		for (int i = 0; g; g = g->next) {
 			inet_ntop(AF_INET6, g->addr.s6_addr, straddr, INET6_ADDRSTRLEN);
@@ -172,6 +173,11 @@ void display_update()
 			mvwprintw(win_stat, i, 38, "| %s", ifname);
 			mode = (g->mode == FILTER_MODE_EXCLUDE) ? "EXCLUDE" : "INCLUDE";
 			mvwprintw(win_stat, i, 48, "| %s", mode);
+			src = (g->mode == FILTER_MODE_EXCLUDE) ? g->src_exc : g->src_inc;
+			for (; src; src = src->next) {
+				inet_ntop(AF_INET6, src->addr.s6_addr, straddr, INET6_ADDRSTRLEN);
+				mvwprintw(win_stat, ++i, 2, "- %s (%sD source)", straddr, mode);
+			}
 			if (i > (y - 2)) break;
 		}
 	}
