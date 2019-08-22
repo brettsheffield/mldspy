@@ -11,6 +11,14 @@ make
 make install
 ```
 
+## Usage
+
+`mldspy [--debug] [--noexpire]`
+
+**--debug** - increase logging level
+
+**--noexpire**  - don't expire group or source records from cache
+
 ## Authors
 
 Brett Sheffield
