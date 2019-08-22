@@ -54,7 +54,7 @@
 
 #define TIMER_SIG SIGRTMIN
 
-#define MLD_RECORD_EXPIRE 10
+#define MLD_RECORD_EXPIRE 150
 
 #if !__USE_KERNEL_IPV6_DEFS
 /* IPv6 packet information.  */
