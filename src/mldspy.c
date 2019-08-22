@@ -110,6 +110,7 @@ static int sock = 0;
 static mld_group_t *groups = NULL;
 static timer_t tid;
 static int timer_expiry = 0;
+static int opt_noexpire = 0;
 
 void display_init() __attribute__((always_inline));
 
@@ -355,6 +356,8 @@ void expire_records() {
 
 	timer_expiry = 0;
 
+	if (opt_noexpire) return;
+
 	logmsg(LOG_DEBUG, "\n-- timer --\n");
 	if (groups) {
 		for (g = groups; g; ) {
@@ -535,6 +538,16 @@ int main(int argc, char **argv)
 	char buf_ctrl[BUFSIZE];
 	char buf_name[BUFSIZE];
 	uint16_t rec;
+
+	while (--argc) {
+		if (strcmp(argv[argc], "--noexpire") == 0) {
+			opt_noexpire = 1;
+		}
+		else {
+			fprintf(stderr, "unknown option '%s'\n", argv[argc]);
+			exit(ERROR_UNKNOWN_OPTION);
+		}
+	}
 
 	sock = socket(AF_INET6, SOCK_RAW, IPPROTO_ICMPV6);
 	assert(sock != 0);

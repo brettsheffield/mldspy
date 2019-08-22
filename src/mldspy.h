@@ -14,5 +14,9 @@ enum {
 	RED_ON_BLACK,
 };
 
+enum {
+	ERROR_UNKNOWN_OPTION = 1,
+};
+
 WINDOW *win_stat;
 WINDOW *win_logs;

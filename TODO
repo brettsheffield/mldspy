@@ -3,6 +3,3 @@ f - freeze/stop scrolling
 shift-F for follow logs
 PGUP/PGDN scroll history
 ? - help
-
-options:
---noexpire - don't expire sources
