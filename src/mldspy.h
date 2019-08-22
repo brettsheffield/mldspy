@@ -4,7 +4,7 @@
 #include <curses.h>
 
 #define PROGRAM_NAME "mldspy"
-#define PROGRAM_VERSION "0.0.0-pre0"
+#define PROGRAM_VERSION "0.0.1"
 
 enum {
 	WHITE_ON_BLACK = 1,

@@ -4,16 +4,16 @@
 PREFIX = /usr/local
 export PREFIX
 
-#CFLAGS += -O -Wall -Werror -g
-CFLAGS += -O -Wall -g
+CFLAGS += -O -Wall -Werror -g
 export CFLAGS
 
 BIN_PATH = $(PREFIX)/sbin
 export BIN_PATH
 
-.PHONY: all clean src
+.PHONY: all clean realclean src
 
-all:	src
+all:
+	@$(MAKE) -C src $@
 
 clean:
 	@$(MAKE) -C src $@
@@ -23,6 +23,7 @@ realclean:
 
 install:
 	@$(MAKE) -C src $@
+	@$(MAKE) -C doc $@
 
 src:
 	@$(MAKE) -C src all
