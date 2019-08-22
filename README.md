@@ -2,6 +2,8 @@
 
 Watch Multicast Listener Discovery (MLDv2) messages on the wire.
 
+![](https://raw.githubusercontent.com/brettsheffield/mldspy/master/screenshot.png)
+
 ## Installation
 
 ```
