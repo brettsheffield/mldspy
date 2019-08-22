@@ -1,3 +1,6 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later 
+ * Copyright (c) 2019 Brett Sheffield <brett@gladserv.com> */
+
 #include <curses.h>
 
 #define PROGRAM_NAME "mldspy"
