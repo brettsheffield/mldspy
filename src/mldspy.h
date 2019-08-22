@@ -16,6 +16,8 @@ enum {
 
 enum {
 	ERROR_UNKNOWN_OPTION = 1,
+	ERROR_JOIN,
+	ERROR_DROPPRIVS,
 };
 
 WINDOW *win_stat;

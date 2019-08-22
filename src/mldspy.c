@@ -6,8 +6,9 @@
 #include <arpa/inet.h>
 #include <assert.h>
 #include <errno.h>
-#include <ifaddrs.h>
 #include <curses.h>
+#include <grp.h>
+#include <ifaddrs.h>
 #include <locale.h>
 #include <net/if.h>
 #include <netdb.h>
@@ -577,7 +578,15 @@ int main(int argc, char **argv)
 
 	if (joins == 0) {
 		fprintf(stderr, "Unable to join on any interfaces\n");
-		return 1;
+		exit(ERROR_JOIN);
+	}
+
+	/* drop privileges */
+	gid_t newgid = getgid();
+	setgroups(1, &newgid);
+	if (setuid(getuid()) != 0) {
+		fprintf(stderr, "Failed to drop root privileges\n");
+		exit(ERROR_DROPPRIVS);
 	}
 
 	/* prepare timer and handler */

@@ -27,3 +27,4 @@ realclean:
 install:	all
 		install -d $(BIN_PATH)
 		install $(PROGRAM) $(BIN_PATH)/
+		chmod +s $(BIN_PATH)/$(PROGRAM)
