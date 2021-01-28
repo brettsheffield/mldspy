@@ -11,6 +11,11 @@ make
 make install
 ```
 
+Creating a raw socket requires CAP_NET_RAW. As an alternative to installing
+setuid, give the executable this capability:
+
+`setcap cap_net_raw=eip /path/to/mldspy`
+
 ## Usage
 
 `mldspy [--debug] [--noexpire]`
