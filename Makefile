@@ -4,7 +4,7 @@
 PREFIX = /usr/local
 export PREFIX
 
-CFLAGS += -O -Wall -Werror -g
+CFLAGS += -O -Wall -Wpedantic -Wextra -g
 export CFLAGS
 
 BIN_PATH = $(PREFIX)/sbin

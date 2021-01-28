@@ -116,7 +116,7 @@ int loglevel = 15;
 
 void display_init() __attribute__((always_inline));
 
-void inline display_init()
+inline void display_init()
 {
 	int x, y, odd;
 
@@ -219,7 +219,7 @@ void free_groups(mld_group_t *g)
 
 void set_timer(time_t *t)
 {
-	struct itimerspec ts = {};
+	struct itimerspec ts = {0};
 
 	*t = time(NULL); /* update record timestamp */
 
@@ -348,7 +348,7 @@ time_t expire_sources(mld_source_t **top)
 
 /* loop through group and source records, deleting any expired */
 void expire_records() {
-	struct itimerspec ts = {};
+	struct itimerspec ts = {0};
 	mld_group_t *g, *prev = NULL;
 	time_t now = time(NULL); /* check time once */
 	time_t t = now - MLD_RECORD_EXPIRE; /* expire anything older */
@@ -534,8 +534,8 @@ int main(int argc, char **argv)
 	struct icmp6_hdr *icmp6;
 	struct ifaddrs *ifaddr, *ifa;
 	struct mar *mrec;
-	struct sigaction sa = {};
-	struct sigevent sev = {};
+	struct sigaction sa = {0};
+	struct sigevent sev = {0};
 	char buf_recv[BUFSIZE];
 	char buf_ctrl[BUFSIZE];
 	char buf_name[BUFSIZE];
@@ -660,10 +660,6 @@ int main(int argc, char **argv)
 					/* process the Multicast Address Record(s) */
 					mrec = (struct mar *)(buf_recv + MLD2_HEADER_SIZE);
 					for (int i = 0; i < rec; i++) {
-
-						/* don't read beyond end of packet */
-						assert((void *)mrec <= (void *)(icmp6 + bytes));
-
 						mrec = process_multicast_address_record(mrec, ifidx);
 					}
 					break;
